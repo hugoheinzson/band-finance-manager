@@ -156,8 +156,45 @@ def _set_self(conn: sqlite3.Connection, musician_id: int, value: bool) -> None:
 
 _MUSICIAN_FIELDS = ("name", "first_name", "last_name", "role", "default_fee", "email", "phone", "iban", "notes", "active", "is_core")
 
+# Namenszusätze, die zum Nachnamen gehören statt zum Vornamen.
+_NAME_PARTICLES = {"von", "van", "de", "del", "della", "der", "den", "di", "da", "dos",
+                   "du", "la", "le", "ter", "van't", "zu", "zum"}
+
+
+def split_full_name(full: str) -> tuple[str, str]:
+    """Vollen Namen in Vor- und Nachname zerlegen.
+
+    Der letzte Bestandteil ist der Nachname, vorangestellte Namenszusätze gehören dazu;
+    Titel bleiben beim Vornamen. Ein einzelnes Wort gilt als Vorname.
+
+    "Ann Example" → ("Ann", "Example"); "Dr. Ann Example" → ("Dr. Ann", "Example");
+    "Ann von Example" → ("Ann", "von Example").
+    """
+    parts = (full or "").split()
+    if len(parts) < 2:
+        return (parts[0] if parts else ""), ""
+    cut = len(parts) - 1
+    while cut > 1 and parts[cut - 1].lower() in _NAME_PARTICLES:
+        cut -= 1
+    return " ".join(parts[:cut]), " ".join(parts[cut:])
+
+
+def _expand_full_name(data: dict) -> dict:
+    """`full_name` als Ein-Feld-Alternative zu `first_name`/`last_name` zulassen.
+
+    Explizit übergebene Einzelfelder haben Vorrang; ohne `full_name` bleibt alles unverändert.
+    """
+    if "full_name" not in data:
+        return data
+    data = dict(data)
+    first, last = split_full_name(data.pop("full_name") or "")
+    data.setdefault("first_name", first)
+    data.setdefault("last_name", last)
+    return data
+
 
 def create_musician(conn: sqlite3.Connection, data: dict) -> dict:
+    data = _expand_full_name(data)
     name = (data.get("name") or "").strip()
     if not name:
         raise Invalid("name fehlt")
@@ -178,6 +215,7 @@ def create_musician(conn: sqlite3.Connection, data: dict) -> dict:
 
 def update_musician(conn: sqlite3.Connection, musician_id: int, data: dict) -> dict:
     get_musician(conn, musician_id)
+    data = _expand_full_name(data)
     sets, vals = [], []
     for k in _MUSICIAN_FIELDS:
         if k not in data:

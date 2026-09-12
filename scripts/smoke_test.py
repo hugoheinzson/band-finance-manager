@@ -65,8 +65,16 @@ def rest() -> None:
 
     # „Das bin ich": eigene Posten bekommen automatisch na/na/na, Statistik zählt „Mein Anteil"
     prev_self = next((x["id"] for x in c.get("/api/musicians?all=true").json() if x.get("is_self")), None)
-    me = c.post("/api/musicians", json={"name": "Smoke Self", "is_self": True, "first_name": "Smoke", "last_name": "Tester"}).json()
+    # DELETE deaktiviert nur – einen Rest aus einem früheren Lauf wiederverwenden, sonst neu anlegen
+    old = next((x["id"] for x in c.get("/api/musicians?all=true").json() if x["name"] == "Smoke Self"), None)
+    body = {"name": "Smoke Self", "is_self": True, "first_name": "Smoke", "last_name": "Tester", "active": True}
+    me = (c.patch(f"/api/musicians/{old}", json=body) if old else c.post("/api/musicians", json=body)).json()
     assert me["is_self"] is True and me["last_name"] == "Tester"
+    # full_name wird in Vor-/Nachname zerlegt, explizite Einzelfelder haben Vorrang
+    me = c.patch(f"/api/musicians/{me['id']}", json={"full_name": "Dr. Smoke von Tester"}).json()
+    assert (me["first_name"], me["last_name"]) == ("Dr. Smoke", "von Tester"), me
+    me = c.patch(f"/api/musicians/{me['id']}", json={"full_name": "Smoke Tester", "last_name": "Tester"}).json()
+    assert (me["first_name"], me["last_name"]) == ("Smoke", "Tester"), me
     mine = c.post(f"/api/variants/{v2['id']}/items", json={"kind": "musician", "role": "Keys", "musician_id": me["id"], "amount": 250}).json()
     assert (mine["info"], mine["invoice"], mine["paid"]) == ("na", "na", "na"), mine
     assert c.patch(f"/api/items/{mine['id']}", json={"paid": "done"}).json()["paid"] == "na", "eigene Zeile muss na bleiben"

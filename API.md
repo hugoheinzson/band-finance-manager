@@ -17,6 +17,8 @@ Fehler: `{"detail": "…"}` mit 400/404.
 Musician {
   "id": 3, "name": "Ben",    // Spitzname/Rufname – wird überall angezeigt
   "first_name": "Ben", "last_name": "Example",   // voller Name für Abrechnung (optional)
+  // Beim Schreiben (POST/PATCH) alternativ "full_name": "Ben Example" – wird in Vor-/Nachname
+  // zerlegt und nur dort eingesetzt, wo first_name/last_name nicht selbst mitgeschickt werden.
   "role": "Bass", "default_fee": 180,
   "email": "", "phone": "", "iban": "", "notes": "", "active": true,
   "is_self": false,          // „das bin ich" (Bandleitung) – höchstens eine Person; ihre Posten haben immer info/invoice/paid = "na"

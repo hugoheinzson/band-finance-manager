@@ -342,13 +342,16 @@ def mark(gig: str, who: str, info: str = "", invoice: str = "", paid: str = "") 
 @mcp.tool
 def upsert_musician(name: str, role: str = "", default_fee: int | None = None, email: str = "", phone: str = "",
                     iban: str = "", notes: str = "", is_self: bool | None = None, is_core: bool | None = None,
-                    first_name: str = "", last_name: str = "") -> str:
+                    full_name: str = "", first_name: str = "", last_name: str = "") -> str:
     """Musiker anlegen oder Stammdaten ergänzen (voller Name, Rolle, Standardgage, E-Mail, Telefon, IBAN). Leere Felder bleiben unverändert.
 
     Args:
         name: Spitzname/Rufname, wie er in den Gigs steht und überall angezeigt wird, z. B. "Ben".
-        first_name: Vorname (für Abrechnung/Rechnungen).
-        last_name: Nachname (für Abrechnung/Rechnungen).
+        full_name: Voller Name am Stück, z. B. "Ben Example" – wird in Vor- und Nachname zerlegt
+            (Namenszusätze wie "von" gehören zum Nachnamen, Titel zum Vornamen). Bequemer als
+            first_name/last_name einzeln; diese haben Vorrang, falls beides übergeben wird.
+        first_name: Vorname (für Abrechnung/Rechnungen), falls getrennt vom Nachnamen gesetzt.
+        last_name: Nachname (für Abrechnung/Rechnungen), falls getrennt vom Vornamen gesetzt.
         role: Instrument/Funktion, z. B. "Bass", "Gesang", "FOH".
         default_fee: Übliche Gage netto – wird bei neuen Posten vorgeschlagen.
         email: E-Mail für Erinnerungen.
@@ -361,7 +364,7 @@ def upsert_musician(name: str, role: str = "", default_fee: int | None = None, e
             false = Aushilfe/Gast.
     """
     patch = {k: v for k, v in {"role": role, "email": email, "phone": phone, "iban": iban, "notes": notes,
-                               "first_name": first_name, "last_name": last_name}.items() if v}
+                               "full_name": full_name, "first_name": first_name, "last_name": last_name}.items() if v}
     if default_fee is not None:
         patch["default_fee"] = default_fee
     if is_self is not None:
