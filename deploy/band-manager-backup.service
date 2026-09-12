@@ -1,0 +1,11 @@
+[Unit]
+Description=Band Manager Backup — SQLite-Snapshot + CSV nach lokal und rclone-Remote
+# Docker läuft als System-Unit; eine User-Unit kann nicht per After= darauf warten → aktiver Poll.
+
+[Service]
+Type=oneshot
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:%h/.local/bin
+# Direkt nach dem Boot ggf. warten, bis der Container die DB geöffnet hat (max. 5 Min), sonst trotzdem laufen.
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do curl -sf http://127.0.0.1:8019/api/health >/dev/null 2>&1 && exit 0; sleep 5; done; echo "band-manager nach 5 Min nicht erreichbar, sichere trotzdem"; exit 0'
+ExecStart=%h/band-manager/deploy/backup.sh
+TimeoutStartSec=20min

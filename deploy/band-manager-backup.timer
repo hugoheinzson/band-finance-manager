@@ -1,0 +1,11 @@
+[Unit]
+Description=Band Manager Backup täglich 09:10 — verpasste Läufe (Rechner aus) werden beim nächsten Boot nachgeholt
+
+[Timer]
+OnCalendar=*-*-* 09:10:00
+Persistent=true
+RandomizedDelaySec=3min
+Unit=band-manager-backup.service
+
+[Install]
+WantedBy=timers.target

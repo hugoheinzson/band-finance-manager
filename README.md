@@ -140,6 +140,17 @@ supplies recipients and text.
 | `BANDMANAGER_DB` | `~/band-manager-data/band-manager.db` | Database path (when running without Docker) |
 | `TZ` | `Europe/Berlin` | Container time zone |
 
+## Backup
+
+`deploy/backup.sh` takes a consistent SQLite snapshot (backup API + integrity check),
+exports flat CSVs (gigs, line items, musicians), syncs everything to an **encrypted**
+rclone remote, keeps 14 daily + 24 monthly copies, and re-downloads the uploaded snapshot
+to prove the round trip. A second CSV set without contact data can go to a plain folder
+(e.g. Dropbox) for a quick look from the phone. Ships with a systemd user timer
+(`Persistent=true`, so a machine that was off catches up on boot) and `deploy/restore.sh`.
+Details, install steps and how to verify a backup from another machine:
+[deploy/RESTORE.md](deploy/RESTORE.md).
+
 ## Development
 
 ```bash
