@@ -43,7 +43,9 @@ mcp = FastMCP(
     instructions=(
         f"Gig-Budgets und Gagen-Auszahlung der Band {BAND_NAME}. Beträge sind immer NETTO in ganzen Euro. "
         "Jeder Posten hat drei Häkchen: info (Musiker über Gage informiert), invoice (Rechnung liegt vor), "
-        "paid (überwiesen) – jeweils open/done/na. Gigs lassen sich per id oder Titel (+ Jahr) ansprechen."
+        "paid (überwiesen) – jeweils open/done/na. Gigs lassen sich per id oder Titel (+ Jahr) ansprechen. "
+        "Musiker mit Flag „Hauptbesetzung“ sind die Standardbesetzung: create_gig(lineup='core') plant sie "
+        "automatisch mit Rolle und Standardgage ein; list_musicians zeigt, wer dazugehört."
     ),
     middleware=[BearerAuth()],
 )
@@ -155,9 +157,16 @@ def list_musicians(include_inactive: bool = False) -> str:
     out = []
     for m in rows:
         contact = " · ".join(x for x in (m["email"], m["phone"]) if x)
-        out.append(f"[{m['id']}] {m['name']} — {m['role'] or '?'} · Standard {_eur(m['default_fee'])} · {m['gig_count']} Gigs"
+        full = " ".join(x for x in (m["first_name"], m["last_name"]) if x)
+        out.append(f"[{m['id']}] {m['name']}" + (f" ({full})" if full else "")
+                   + f" — {m['role'] or '?'} · Standard {_eur(m['default_fee'])} · {m['gig_count']} Gigs"
+                   + (" · ★ Hauptbesetzung" if m["is_core"] else "")
                    + (" · DAS BIN ICH (Bandleitung, keine Häkchen)" if m["is_self"] else "")
                    + (f" · {contact}" if contact else "") + ("" if m["active"] else " · INAKTIV"))
+    core = [m for m in rows if m["is_core"] and m["active"]]
+    if core:
+        out += ["", f"Hauptbesetzung: {len(core)} Personen, Standardgagen zusammen {_eur(sum(m['default_fee'] for m in core))} "
+                    f"– create_gig(..., lineup='core') plant genau diese ein."]
     return "\n".join(out)
 
 
@@ -184,8 +193,9 @@ def stats() -> str:
 
 @mcp.tool
 def create_gig(title: str, fee: int, date_iso: str = "", venue: str = "", status: str = "angebot",
-               template: str = "", notes: str = "") -> str:
-    """Neuen Gig anlegen – auf Wunsch aus einer Vorlage (Besetzung + Beträge werden kopiert, Häkchen auf offen).
+               template: str = "", lineup: str = "core", notes: str = "") -> str:
+    """Neuen Gig anlegen. Ohne weitere Angabe wird die **Hauptbesetzung** eingeplant (alle Musiker mit
+    Flag „Hauptbesetzung", je mit Rolle und Standardgage) – alternativ aus einer Vorlage / einem früheren Gig.
 
     Args:
         title: Name des Gigs, z. B. "Weinfest Hillside".
@@ -194,13 +204,19 @@ def create_gig(title: str, fee: int, date_iso: str = "", venue: str = "", status
         venue: Ort/Art, z. B. "Stadtfest", "Hochzeit".
         status: angebot (Default) | bestaetigt | vorlage.
         template: Vorlage per id oder Titel, z. B. "Kleine Besetzung" – oder ein früherer Gig ("Sommerfest 2025"),
-            dessen Besetzung übernommen werden soll. Leer = leerer Gig.
+            dessen Besetzung übernommen werden soll. Hat Vorrang vor lineup.
+        lineup: "core" (Default) = Hauptbesetzung einplanen · "" = leerer Gig ohne Posten.
         notes: Freitext.
     """
     template_id = _svc(service.find_gig, template)["id"] if template.strip() else None
+    hint = ""
+    if not template_id and lineup == "core" and not _svc(service.core_lineup):
+        lineup, hint = "", "\n\nHinweis: Noch niemand als Hauptbesetzung markiert – Gig ohne Posten angelegt. " \
+                           "Mit upsert_musician(name, is_core=true) markieren, dann plant create_gig automatisch."
     g = _svc(service.create_gig, {"title": title, "fee": fee, "date": date_iso or None, "venue": venue,
-                                  "status": status, "notes": notes, "template_gig_id": template_id})
-    return "Gig angelegt.\n\n" + _gig_detail(g)
+                                  "status": status, "notes": notes, "template_gig_id": template_id,
+                                  "lineup": "" if template_id else lineup})
+    return "Gig angelegt.\n\n" + _gig_detail(g) + hint
 
 
 @mcp.tool
@@ -325,11 +341,14 @@ def mark(gig: str, who: str, info: str = "", invoice: str = "", paid: str = "") 
 
 @mcp.tool
 def upsert_musician(name: str, role: str = "", default_fee: int | None = None, email: str = "", phone: str = "",
-                    iban: str = "", notes: str = "", is_self: bool | None = None) -> str:
-    """Musiker anlegen oder Stammdaten ergänzen (Rolle, Standardgage, E-Mail, Telefon, IBAN). Leere Felder bleiben unverändert.
+                    iban: str = "", notes: str = "", is_self: bool | None = None, is_core: bool | None = None,
+                    first_name: str = "", last_name: str = "") -> str:
+    """Musiker anlegen oder Stammdaten ergänzen (voller Name, Rolle, Standardgage, E-Mail, Telefon, IBAN). Leere Felder bleiben unverändert.
 
     Args:
-        name: Vorname/Spitzname, wie er in den Gigs steht, z. B. "Ben".
+        name: Spitzname/Rufname, wie er in den Gigs steht und überall angezeigt wird, z. B. "Ben".
+        first_name: Vorname (für Abrechnung/Rechnungen).
+        last_name: Nachname (für Abrechnung/Rechnungen).
         role: Instrument/Funktion, z. B. "Bass", "Gesang", "FOH".
         default_fee: Übliche Gage netto – wird bei neuen Posten vorgeschlagen.
         email: E-Mail für Erinnerungen.
@@ -338,12 +357,17 @@ def upsert_musician(name: str, role: str = "", default_fee: int | None = None, e
         notes: Freitext.
         is_self: true = diese Person ist die Bandleitung selbst: ihre Posten haben keine Häkchen
             (kein Informieren, keine Rechnung, keine Überweisung) und zählen als „Mein Anteil" in stats.
+        is_core: true = gehört zur Hauptbesetzung (wird bei create_gig(lineup='core') automatisch eingeplant);
+            false = Aushilfe/Gast.
     """
-    patch = {k: v for k, v in {"role": role, "email": email, "phone": phone, "iban": iban, "notes": notes}.items() if v}
+    patch = {k: v for k, v in {"role": role, "email": email, "phone": phone, "iban": iban, "notes": notes,
+                               "first_name": first_name, "last_name": last_name}.items() if v}
     if default_fee is not None:
         patch["default_fee"] = default_fee
     if is_self is not None:
         patch["is_self"] = is_self
+    if is_core is not None:
+        patch["is_core"] = is_core
     m = _svc(service.find_musician, name)
     if m:
         patch["active"] = True  # ein früher deaktivierter Musiker wird durch Upsert wieder aktiv

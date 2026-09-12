@@ -185,16 +185,20 @@ tfoot td{background:var(--surface-2);font-weight:700;border-top:1px solid var(--
 .menu-backdrop{position:fixed;inset:0;z-index:49}
 
 /* Musiker */
-.people{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
-.person-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:grid;grid-template-columns:40px 1fr;gap:12px;align-items:start;text-align:left;width:100%;color:inherit}
-.person-card:hover{border-color:var(--line-strong)}
-.person-card .avatar{width:40px;height:40px;font-size:14px;margin:0}
-.person-card h3{font-size:16px;font-weight:700}
-.person-card .role{font-size:13px;color:var(--muted)}
-.person-card .kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:13px;margin-top:8px}
-.person-card .kv span{color:var(--muted)}
-.person-card .iban{color:var(--warn);font-weight:600}
-.person-card.inactive{opacity:.55}
+/* Musiker-Tabelle: Hauptbesetzung zuerst, Zeile = Bearbeiten */
+.mtable{min-width:720px}
+.mtable .mrow{cursor:pointer}
+.mtable .mrow:hover td{background:var(--surface-2)}
+.mtable .mrow:focus-visible td{outline:2px solid var(--accent);outline-offset:-2px}
+.mtable .mrow.inactive td{color:var(--faint)}
+.mtable td.person b{font-weight:600}
+.mtable td.muted{color:var(--muted)}
+.mtable td.contact{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mtable .star{color:var(--accent);font-size:14px}
+.mtable .ok{color:var(--good);font-weight:700}
+.mtable .iban{color:var(--warn);font-weight:600;font-size:12px}
+.mtable .placeholder{color:var(--faint)}
+@media (max-width:600px){.mtable{min-width:0}.mtable th:nth-child(2),.mtable td:nth-child(2),.mtable th:nth-child(7),.mtable td:nth-child(7){display:none}}
 
 /* Statistik */
 .chart{padding:16px}

@@ -605,7 +605,10 @@ async function openNewGig() {
   const dlg = $('#dlgGig'); const form = $('#formGig');
   form.reset();
   const sel = $('#ngTemplate');
-  sel.innerHTML = '<option value="">Leer (ohne Posten)</option>';
+  const core = state.musicians.filter((m) => m.is_core && m.active);
+  const coreSum = core.reduce((a, m) => a + (m.default_fee || 0), 0);
+  sel.innerHTML = (core.length ? `<option value="__core" selected>Hauptbesetzung · ${core.length} Personen · ${eur(coreSum)} Standardgagen</option>` : '')
+    + '<option value="">Leer (ohne Posten)</option>';
   try {
     if (!state.stats) await loadStats();
     for (const t of state.stats.templates) sel.innerHTML += `<option value="${t.id}">${esc(t.title)} · ${eur(t.totals.fee)}</option>`;
@@ -623,7 +626,8 @@ async function openNewGig() {
     title: fd.get('title').trim(), date: fd.get('date') || null, venue: fd.get('venue').trim(),
     fee: parseInt(fd.get('fee'), 10) || 0, status: fd.get('status'),
   };
-  if (fd.get('template_gig_id')) body.template_gig_id = Number(fd.get('template_gig_id'));
+  if (fd.get('template_gig_id') === '__core') body.lineup = 'core';
+  else if (fd.get('template_gig_id')) body.template_gig_id = Number(fd.get('template_gig_id'));
   try {
     const g = await api('POST', '/api/gigs', body);
     dlg.close(); await loadGigs(); state.stats = null; toast('Gig angelegt'); go(`#/gigs/${g.id}`);
@@ -661,8 +665,10 @@ async function openMusicianDialog(existing, defaults = {}) {
   $('#muSubmit').textContent = existing ? 'Speichern' : 'Anlegen';
   const set = (id, v) => { $(id).value = v ?? ''; };
   set('#muName', existing?.name); set('#muRole', existing?.role ?? defaults.role); set('#muFee', existing?.default_fee ?? '');
+  set('#muFirst', existing?.first_name); set('#muLast', existing?.last_name);
   set('#muPhone', existing?.phone); set('#muEmail', existing?.email); set('#muIban', existing?.iban); set('#muNotes', existing?.notes);
   $('#muSelf').checked = !!existing?.is_self;
+  $('#muCore').checked = !!existing?.is_core;
   const deact = $('#muDeactivate'); deact.hidden = !existing || existing.active === false;
   let deactivated = false;
   const onDeact = async () => {
@@ -676,9 +682,10 @@ async function openMusicianDialog(existing, defaults = {}) {
   if (deactivated) { await loadMusicians(); if (state.tab === 'musicians') renderMusicians(); return null; }
   if (!fd) return null;
   const body = {
-    name: fd.get('name').trim(), role: fd.get('role').trim(), default_fee: parseInt(fd.get('default_fee'), 10) || 0,
+    name: fd.get('name').trim(), first_name: fd.get('first_name').trim(), last_name: fd.get('last_name').trim(),
+    role: fd.get('role').trim(), default_fee: parseInt(fd.get('default_fee'), 10) || 0,
     email: fd.get('email').trim(), phone: fd.get('phone').trim(), iban: fd.get('iban').replace(/\s+/g, '').toUpperCase(), notes: fd.get('notes').trim(),
-    is_self: fd.get('is_self') === 'on',
+    is_self: fd.get('is_self') === 'on', is_core: fd.get('is_core') === 'on',
   };
   try {
     const m = existing ? await api('PATCH', `/api/musicians/${existing.id}`, body) : await api('POST', '/api/musicians', body);
@@ -694,22 +701,38 @@ async function openMusicianDialog(existing, defaults = {}) {
 let showInactive = false;
 function renderMusicians() {
   const main = $('#main'); const list = state.musicians;
-  main.innerHTML = `<div class="topbar"><div><h2>Musiker &amp; Crew</h2><div class="meta">${list.filter((m) => m.active).length} aktiv · Standardgagen werden beim Besetzen vorgeschlagen</div></div>
+  // Hauptbesetzung zuerst, dann der Rest – jeweils alphabetisch nach Spitzname
+  const sorted = list.slice().sort((a, b) => (b.is_core - a.is_core) || (b.active - a.active) || a.name.localeCompare(b.name, 'de'));
+  const core = list.filter((m) => m.is_core && m.active);
+  const fullName = (p) => [p.first_name, p.last_name].filter(Boolean).join(' ');
+  const row = (p) => `<tr class="mrow ${p.active ? '' : 'inactive'}" data-person="${p.id}" tabindex="0">
+      <td class="person"><span class="avatar">${esc(initials(p.name))}</span><b>${esc(p.name)}</b>${p.is_self ? ' <span class="chip" style="font-size:10px">ich</span>' : ''}</td>
+      <td class="muted">${esc(fullName(p)) || '<span class="placeholder">–</span>'}</td>
+      <td>${esc(p.role || '—')}</td>
+      <td class="c">${p.is_core ? '<span class="star" title="Hauptbesetzung">★</span>' : ''}</td>
+      <td class="r num">${p.default_fee ? eur(p.default_fee) : '—'}</td>
+      <td class="r num">${p.gig_count ?? 0}</td>
+      <td class="muted contact">${esc([p.email, p.phone].filter(Boolean).join(' · ')) || '<span class="placeholder">–</span>'}</td>
+      <td class="c">${p.iban ? '<span class="ok">✓</span>' : '<span class="iban">fehlt</span>'}</td>
+    </tr>`;
+  main.innerHTML = `<div class="topbar"><div><h2>Musiker &amp; Crew</h2><div class="meta">${list.filter((m) => m.active).length} aktiv · ★ Hauptbesetzung: ${core.length} Personen, ${eur(core.reduce((a, m) => a + (m.default_fee || 0), 0))} Standardgagen</div></div>
     <div class="actions"><button class="btn" id="toggleInactive">${showInactive ? 'Inaktive ausblenden' : 'Inaktive zeigen'}</button><button class="btn primary" id="newMusician">+ Person</button></div></div>
-    ${list.length ? `<div class="people">${list.map((p) => `<button class="person-card ${p.active ? '' : 'inactive'}" data-person="${p.id}"><span class="avatar">${esc(initials(p.name))}</span><div>
-      <h3>${esc(p.name)}</h3><div class="role">${esc(p.role || '—')}${p.is_self ? ' · das bin ich' : ''}${p.active ? '' : ' · inaktiv'}</div>
-      <div class="kv"><span>Standardgage</span><b class="num">${p.default_fee ? eur(p.default_fee) : '—'}</b><span>Gigs</span><b class="num">${p.gig_count ?? 0}</b><span>IBAN</span>${p.iban ? '<b>hinterlegt</b>' : '<b class="iban">fehlt</b>'}</div>
-    </div></button>`).join('')}</div>` : '<div class="empty">Noch niemand angelegt – füge die erste Person hinzu.</div>'}`;
+    ${list.length ? `<div class="panel"><div class="tbl-wrap"><table class="mtable">
+      <thead><tr><th>Spitzname</th><th>Voller Name</th><th>Rolle</th><th class="c" title="Hauptbesetzung">★</th><th class="r">Standardgage</th><th class="r">Gigs</th><th>Kontakt</th><th class="c">IBAN</th></tr></thead>
+      <tbody>${sorted.map(row).join('')}</tbody></table></div>
+      <div class="addrow"><span style="color:var(--faint);font-size:12px">Zeile antippen zum Bearbeiten · ★ = wird bei „Neuer Gig → Hauptbesetzung“ automatisch eingeplant</span></div></div>`
+    : '<div class="empty">Noch niemand angelegt – füge die erste Person hinzu.</div>'}`;
   $('#newMusician').addEventListener('click', () => openMusicianDialog(null));
   $('#toggleInactive').addEventListener('click', async () => {
     showInactive = !showInactive;
     state.musicians = await api('GET', showInactive ? '/api/musicians?all=true' : '/api/musicians');
     renderMusicians();
   });
-  $$('[data-person]').forEach((b) => b.addEventListener('click', () => {
-    const m = state.musicians.find((x) => x.id === Number(b.dataset.person));
-    openMusicianDialog(m);
-  }));
+  const open = (b) => openMusicianDialog(state.musicians.find((x) => x.id === Number(b.dataset.person)));
+  $$('[data-person]').forEach((b) => {
+    b.addEventListener('click', () => open(b));
+    b.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(b); } });
+  });
 }
 
 // ---------------------------------------------------------------------------

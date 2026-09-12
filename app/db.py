@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
 
 CREATE TABLE IF NOT EXISTS musicians (
     id          INTEGER PRIMARY KEY,
-    name        TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    name        TEXT NOT NULL UNIQUE COLLATE NOCASE, -- Spitzname/Rufname, wird überall angezeigt
+    first_name  TEXT NOT NULL DEFAULT '',            -- voller Name für Abrechnung/Rechnungen
+    last_name   TEXT NOT NULL DEFAULT '',
     role        TEXT NOT NULL DEFAULT '',
     default_fee INTEGER NOT NULL DEFAULT 0,
     email       TEXT NOT NULL DEFAULT '',
@@ -34,6 +36,7 @@ CREATE TABLE IF NOT EXISTS musicians (
     notes       TEXT NOT NULL DEFAULT '',
     active      INTEGER NOT NULL DEFAULT 1,
     is_self     INTEGER NOT NULL DEFAULT 0,      -- „das bin ich" (Bandleitung): keine Häkchen, eigener Anteil in der Statistik
+    is_core     INTEGER NOT NULL DEFAULT 0,      -- Hauptbesetzung: wird bei „neuer Gig mit Standardbesetzung" automatisch eingeplant
     created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
@@ -89,11 +92,14 @@ CREATE INDEX IF NOT EXISTS idx_items_musician ON line_items(musician_id);
 CREATE INDEX IF NOT EXISTS idx_events_gig ON events(gig_id);
 """
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 4
 
 # Migrationen von Version n → n+1 (nur für bestehende Datenbanken; neue bekommen sofort das volle Schema)
 MIGRATIONS = {
     1: ["ALTER TABLE musicians ADD COLUMN is_self INTEGER NOT NULL DEFAULT 0"],
+    2: ["ALTER TABLE musicians ADD COLUMN is_core INTEGER NOT NULL DEFAULT 0"],
+    3: ["ALTER TABLE musicians ADD COLUMN first_name TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE musicians ADD COLUMN last_name TEXT NOT NULL DEFAULT ''"],
 }
 
 

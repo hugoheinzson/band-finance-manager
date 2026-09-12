@@ -15,9 +15,12 @@ Fehler: `{"detail": "…"}` mit 400/404.
 
 ```jsonc
 Musician {
-  "id": 3, "name": "Ben", "role": "Bass", "default_fee": 180,
+  "id": 3, "name": "Ben",    // Spitzname/Rufname – wird überall angezeigt
+  "first_name": "Ben", "last_name": "Example",   // voller Name für Abrechnung (optional)
+  "role": "Bass", "default_fee": 180,
   "email": "", "phone": "", "iban": "", "notes": "", "active": true,
   "is_self": false,          // „das bin ich" (Bandleitung) – höchstens eine Person; ihre Posten haben immer info/invoice/paid = "na"
+  "is_core": true,           // Hauptbesetzung – wird bei POST /api/gigs mit lineup="core" automatisch eingeplant
   "gig_count": 19            // nur lesend, Anzahl Gigs mit Posten dieser Person
 }
 
@@ -70,7 +73,7 @@ GigListItem {                 // Liste
 | Methode | Pfad | Body / Query | Antwort |
 |---|---|---|---|
 | GET | `/api/gigs` | `?year=2026&status=bestaetigt` (optional) | `[GigListItem]`, neueste zuerst |
-| POST | `/api/gigs` | `{title, date?, venue?, status?="angebot", fee, notes?, template_gig_id?}` | `Gig` (201). Mit `template_gig_id`: Posten der aktiven Variante des Template-Gigs kopieren, alle Flags auf `open`, Beträge übernehmen. Ohne Template: Variante „Standard" mit leerer Postenliste. |
+| POST | `/api/gigs` | `{title, date?, venue?, status?="angebot", fee, notes?, template_gig_id?, lineup?}` | `Gig` (201). Mit `template_gig_id`: Posten der aktiven Variante des Template-Gigs kopieren, alle Flags auf `open`, Beträge übernehmen. Mit `lineup="core"`: je aktivem Musiker mit `is_core` eine Zeile (Rolle, Standardgage). Sonst: Variante „Standard" mit leerer Postenliste. |
 | GET | `/api/gigs/{id}` | | `Gig` |
 | PATCH | `/api/gigs/{id}` | `{title?, date?, venue?, status?, notes?, active_variant_id?}` | `Gig` |
 | DELETE | `/api/gigs/{id}` | | 204 |

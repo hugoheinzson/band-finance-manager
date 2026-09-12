@@ -118,9 +118,11 @@ def cmd_export_csv(outdir: Path, public: bool) -> dict:
             rows = conn.execute("SELECT * FROM musicians ORDER BY name COLLATE NOCASE").fetchall()
             with open(outdir / "musiker.csv", "w", newline="", encoding="utf-8-sig") as f:
                 w = csv.writer(f, delimiter=";")
-                w.writerow(["id", "name", "rolle", "standardgage", "email", "telefon", "iban", "notizen", "aktiv"])
+                w.writerow(["id", "spitzname", "vorname", "nachname", "rolle", "hauptbesetzung", "standardgage",
+                            "email", "telefon", "iban", "notizen", "aktiv"])
                 for m in rows:
-                    w.writerow([m["id"], m["name"], m["role"], m["default_fee"], m["email"], m["phone"], m["iban"],
+                    w.writerow([m["id"], m["name"], m["first_name"], m["last_name"], m["role"], "ja" if m["is_core"] else "nein",
+                                m["default_fee"], m["email"], m["phone"], m["iban"],
                                 m["notes"].replace("\n", " "), "ja" if m["active"] else "nein"])
             written.append("musiker.csv")
     finally:

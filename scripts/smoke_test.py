@@ -65,14 +65,24 @@ def rest() -> None:
 
     # „Das bin ich": eigene Posten bekommen automatisch na/na/na, Statistik zählt „Mein Anteil"
     prev_self = next((x["id"] for x in c.get("/api/musicians?all=true").json() if x.get("is_self")), None)
-    me = c.post("/api/musicians", json={"name": "Smoke Self", "is_self": True}).json()
-    assert me["is_self"] is True
+    me = c.post("/api/musicians", json={"name": "Smoke Self", "is_self": True, "first_name": "Smoke", "last_name": "Tester"}).json()
+    assert me["is_self"] is True and me["last_name"] == "Tester"
     mine = c.post(f"/api/variants/{v2['id']}/items", json={"kind": "musician", "role": "Keys", "musician_id": me["id"], "amount": 250}).json()
     assert (mine["info"], mine["invoice"], mine["paid"]) == ("na", "na", "na"), mine
     assert c.patch(f"/api/items/{mine['id']}", json={"paid": "done"}).json()["paid"] == "na", "eigene Zeile muss na bleiben"
     yr = [y for y in c.get("/api/stats").json()["years"] if y["year"] == 2030]
     assert yr and yr[0]["self_total"] == 250, yr
     assert c.patch(f"/api/items/{mine['id']}", json={"musician_id": m["id"]}).json()["paid"] == "open", "nach Wechsel weg von mir wieder offen"
+    # Hauptbesetzung: create_gig(lineup=core) plant alle is_core-Musiker mit Rolle + Standardgage ein
+    me = c.patch(f"/api/musicians/{me['id']}", json={"is_core": True, "role": "Keys", "default_fee": 300}).json()
+    assert me["is_core"] is True
+    cg = c.post("/api/gigs", json={"title": "Smoke-Core", "fee": 1500, "lineup": "core"}).json()
+    core_items = cg["variants"][0]["items"]
+    mine_core = [i for i in core_items if i["musician_id"] == me["id"]]
+    assert mine_core and mine_core[0]["amount"] == 300 and mine_core[0]["role"] == "Keys", core_items
+    assert c.post("/api/gigs", json={"title": "x", "fee": 1, "lineup": "foo"}).status_code == 400
+    assert c.delete(f"/api/gigs/{cg['id']}").status_code == 204
+    c.patch(f"/api/musicians/{me['id']}", json={"is_core": False})
     if prev_self is not None:
         c.patch(f"/api/musicians/{prev_self}", json={"is_self": True})  # ursprüngliche Markierung zurück
     else:
@@ -95,7 +105,7 @@ async def mcp() -> None:
 
         r = await client.call_tool("upsert_musician", {"name": "Smoke Tester", "role": "Kazoo", "default_fee": 42, "email": "x@example.org"})
         assert "Smoke Tester" in r.data
-        r = await client.call_tool("create_gig", {"title": "Smoke-MCP", "fee": 500, "date_iso": "2030-02-02"})
+        r = await client.call_tool("create_gig", {"title": "Smoke-MCP", "fee": 500, "date_iso": "2030-02-02", "lineup": ""})
         assert "Smoke-MCP" in r.data
         r = await client.call_tool("set_line", {"gig": "Smoke-MCP", "role": "Kazoo", "musician": "Smoke Tester"})
         assert "42 €" in r.data and "Rest jetzt 458 €" in r.data, r.data

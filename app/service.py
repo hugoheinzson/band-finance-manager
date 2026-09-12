@@ -130,7 +130,15 @@ def find_musician(conn: sqlite3.Connection, name: str) -> dict | None:
 def _fix_musician(m: dict) -> dict:
     m["active"] = bool(m["active"])
     m["is_self"] = bool(m.get("is_self", 0))
+    m["is_core"] = bool(m.get("is_core", 0))
     return m
+
+
+def core_lineup(conn: sqlite3.Connection) -> list[dict]:
+    """Hauptbesetzung: aktive Musiker mit is_core, in Rollen-Reihenfolge – die Standardplanung für einen neuen Gig."""
+    order = {r: i for i, r in enumerate(("Keys", "Gesang", "Sängerin", "Sänger", "Bass", "Gitarre", "Drums", "Sax", "Trompete", "FOH"))}
+    rows = [_fix_musician(dict(r)) for r in conn.execute(_MUSICIAN_SQL + " WHERE m.active = 1 AND m.is_core = 1")]
+    return sorted(rows, key=lambda m: (order.get(m["role"], 50), m["name"].lower()))
 
 
 def self_musician_id(conn: sqlite3.Connection) -> int | None:
@@ -146,7 +154,7 @@ def _set_self(conn: sqlite3.Connection, musician_id: int, value: bool) -> None:
     conn.execute("UPDATE musicians SET is_self = ? WHERE id = ?", (1 if value else 0, musician_id))
 
 
-_MUSICIAN_FIELDS = ("name", "role", "default_fee", "email", "phone", "iban", "notes", "active")
+_MUSICIAN_FIELDS = ("name", "first_name", "last_name", "role", "default_fee", "email", "phone", "iban", "notes", "active", "is_core")
 
 
 def create_musician(conn: sqlite3.Connection, data: dict) -> dict:
@@ -156,10 +164,12 @@ def create_musician(conn: sqlite3.Connection, data: dict) -> dict:
     if conn.execute("SELECT 1 FROM musicians WHERE name = ? COLLATE NOCASE", (name,)).fetchone():
         raise Invalid(f"Musiker {name!r} existiert bereits")
     cur = conn.execute(
-        "INSERT INTO musicians (name, role, default_fee, email, phone, iban, notes) VALUES (?,?,?,?,?,?,?)",
-        (name, (data.get("role") or "").strip(), _int(data.get("default_fee") or 0, "default_fee"),
+        """INSERT INTO musicians (name, first_name, last_name, role, default_fee, email, phone, iban, notes, is_core)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (name, (data.get("first_name") or "").strip(), (data.get("last_name") or "").strip(),
+         (data.get("role") or "").strip(), _int(data.get("default_fee") or 0, "default_fee"),
          (data.get("email") or "").strip(), (data.get("phone") or "").strip(),
-         (data.get("iban") or "").replace(" ", "").strip(), data.get("notes") or ""),
+         (data.get("iban") or "").replace(" ", "").strip(), data.get("notes") or "", 1 if data.get("is_core") else 0),
     )
     if data.get("is_self"):
         _set_self(conn, cur.lastrowid, True)
@@ -175,7 +185,7 @@ def update_musician(conn: sqlite3.Connection, musician_id: int, data: dict) -> d
         v = data[k]
         if k == "default_fee":
             v = _int(v, k)
-        elif k == "active":
+        elif k in ("active", "is_core"):
             v = 1 if v else 0
         elif k == "name":
             v = (v or "").strip()
@@ -184,7 +194,7 @@ def update_musician(conn: sqlite3.Connection, musician_id: int, data: dict) -> d
         elif k == "iban":
             v = (v or "").replace(" ", "").strip()
         else:
-            v = v or ""
+            v = (v or "").strip() if k != "notes" else (v or "")
         sets.append(f"{k} = ?")
         vals.append(v)
     if sets:
@@ -441,12 +451,23 @@ def create_gig(conn: sqlite3.Connection, data: dict) -> dict:
     gig_id = cur.lastrowid
     fee = _int(data.get("fee") or 0, "fee")
     template_id = data.get("template_gig_id")
+    lineup = data.get("lineup") or ""
     if template_id:
         tpl = get_gig_row(conn, int(template_id))
         variant = create_variant(conn, gig_id, data.get("variant_name") or "Standard", fee,
                                  copy_from_variant_id=tpl["active_variant_id"])
     else:
         variant = create_variant(conn, gig_id, data.get("variant_name") or "Standard", fee)
+        if lineup == "core":
+            # Hauptbesetzung: je Musiker eine Zeile mit Rolle und Standardgage
+            core = core_lineup(conn)
+            if not core:
+                raise Invalid("Keine Hauptbesetzung markiert – erst Musiker als „Hauptbesetzung“ kennzeichnen")
+            for m in core:
+                create_item(conn, variant["id"], {"kind": "musician", "role": m["role"] or m["name"],
+                                                  "musician_id": m["id"], "amount": m["default_fee"]})
+        elif lineup:
+            raise Invalid(f"lineup muss leer oder 'core' sein, nicht {lineup!r}")
     conn.execute("UPDATE gigs SET active_variant_id = ? WHERE id = ?", (variant["id"], gig_id))
     return get_gig(conn, gig_id)
 
