@@ -1,0 +1,25 @@
+# Band Manager – Gig-Budgets & Gagen-Auszahlung
+#   Web-App:  http://127.0.0.1:8019/        → z. B. per `tailscale serve --https=8443 http://127.0.0.1:8019` ins Tailnet
+#   MCP:      http://127.0.0.1:8019/mcp     → direkt oder in einem Aggregator als Namespace `gig`
+#   Daten:    ~/band-manager-data/band-manager.db   (SQLite; Backup = Datei kopieren)
+services:
+  band-manager:
+    build: .
+    container_name: band-manager
+    restart: unless-stopped
+    ports:
+      # Default: nur localhost. Für Zugriff aus dem LAN/VPN BANDMANAGER_BIND=0.0.0.0 in .env setzen
+      # (kein Login! nur in vertrauenswürdigen Netzen).
+      - "${BANDMANAGER_BIND:-127.0.0.1}:8019:8019"
+    environment:
+      BANDMANAGER_API_TOKEN: ${BANDMANAGER_API_TOKEN:?BANDMANAGER_API_TOKEN in .env setzen}
+      BANDMANAGER_BAND_NAME: ${BANDMANAGER_BAND_NAME:-Meine Band}
+      BANDMANAGER_SENDER_NAME: ${BANDMANAGER_SENDER_NAME:-}
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - ${BANDMANAGER_DATA:-~/band-manager-data}:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

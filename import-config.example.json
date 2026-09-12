@@ -1,0 +1,24 @@
+{
+  "_comment": "Mapping für scripts/import_excel.py. Kopie als import-config.json anlegen (gitignored) und an die eigene Band anpassen. Alle Vergleiche sind case-insensitiv.",
+  "self_name": "Me",
+  "roles": {
+    "keys": "Keys", "sängerin": "Sängerin", "sänger": "Sänger", "bass": "Bass", "gitarre": "Gitarre", "git": "Gitarre",
+    "drums": "Drums", "sax": "Sax", "foh": "FOH", "trompete": "Trompete"
+  },
+  "names": {
+    "me": ["Me", "Keys"],
+    "anna": ["Anna", "Gesang"],
+    "ben": ["Ben", "Bass"],
+    "chris": ["Chris", "Gitarre"],
+    "dave": ["Dave", "Drums"],
+    "eve": ["Eve", "Sax"],
+    "finn": ["Finn", "FOH"]
+  },
+  "costs": {
+    "pa": "PA", "anlage": "PA", "bandkasse": "Bandkasse", "fotograf": "Fotograf", "licht": "Licht", "pult": "Pult", "spesen": "Spesen"
+  },
+  "year_defaults": { "2022|Drums": "Dave" },
+  "sheet_fix": { "Weinf": "Weinfest" },
+  "template_titles": ["Kleine Besetzung"],
+  "_template_titles": "Blätter mit genau diesem Titel werden als Vorlage (status vorlage) importiert"
+}

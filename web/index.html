@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Band Manager</title>
+  <meta name="description" content="Budget & Auszahlung für Band-Gigs">
+  <meta name="theme-color" content="#1E1C24" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0F0E13" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Band Manager">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body data-view="detail">
+  <div class="app" id="app">
+    <aside class="side" id="side">
+      <div class="brand">
+        <div class="mark" id="brandMark" aria-hidden="true">♪</div>
+        <div><h1 id="brandName">Band Manager</h1><div class="sub" id="brandSub">Budget &amp; Auszahlung</div></div>
+      </div>
+      <nav class="nav" role="tablist" aria-label="Bereiche">
+        <a role="tab" href="#/gigs" data-nav="gigs">Gigs</a>
+        <a role="tab" href="#/musicians" data-nav="musicians">Musiker</a>
+        <a role="tab" href="#/stats" data-nav="stats">Statistik</a>
+      </nav>
+      <div class="filters" id="filters" role="group" aria-label="Filter">
+        <button data-filter="all" aria-pressed="true">Alle</button>
+        <button data-filter="open" aria-pressed="false">Offen</button>
+        <button data-filter="angebot" aria-pressed="false">Angebote</button>
+        <button data-filter="vorlage" aria-pressed="false">Vorlagen</button>
+      </div>
+      <div class="gig-list" id="gigList" aria-live="polite"></div>
+      <div class="side-foot"><button class="btn ghost" id="newGig">+ Neuer Gig</button></div>
+    </aside>
+    <main class="main" id="main"></main>
+  </div>
+
+  <nav class="tabbar" role="tablist" aria-label="Bereiche">
+    <a role="tab" href="#/gigs" data-nav="gigs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Gigs</a>
+    <a role="tab" href="#/musicians" data-nav="musicians"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4a3.5 3.5 0 0 1 0 7M18 13.5a6 6 0 0 1 4 6.5"/></svg>Musiker</a>
+    <a role="tab" href="#/stats" data-nav="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>Statistik</a>
+  </nav>
+
+  <!-- Dialog: Neuer Gig -->
+  <dialog id="dlgGig" class="dlg">
+    <form method="dialog" id="formGig">
+      <h3>Neuer Gig</h3>
+      <label>Titel<input id="ngTitle" name="title" required placeholder="z. B. Weinfest Hillside" autocomplete="off"></label>
+      <div class="row2">
+        <label>Datum<input id="ngDate" name="date" type="date"></label>
+        <label>Gage (netto)<input id="ngFee" name="fee" type="number" inputmode="numeric" min="0" step="1" required placeholder="2200"></label>
+      </div>
+      <label>Ort / Anlass<input id="ngVenue" name="venue" placeholder="Stadtfest, Hochzeit …" autocomplete="off"></label>
+      <label>Vorlage<select id="ngTemplate" name="template_gig_id"><option value="">Leer (ohne Posten)</option></select></label>
+      <label>Status<select id="ngStatus" name="status"><option value="angebot">Angebot</option><option value="bestaetigt">Bestätigt</option><option value="vorlage">Vorlage</option></select></label>
+      <div class="dlg-actions"><button type="button" class="btn" value="cancel" data-close>Abbrechen</button><button type="submit" class="btn primary">Anlegen</button></div>
+    </form>
+  </dialog>
+
+  <!-- Dialog: Variante -->
+  <dialog id="dlgVariant" class="dlg">
+    <form method="dialog" id="formVariant">
+      <h3 id="dlgVariantTitle">Neue Variante</h3>
+      <label>Name<input id="vaName" name="name" required placeholder="z. B. Reduziert" autocomplete="off"></label>
+      <label>Gage (netto)<input id="vaFee" name="fee" type="number" inputmode="numeric" min="0" step="1" required></label>
+      <label class="check" id="vaCopyWrap"><input type="checkbox" id="vaCopy" name="copy" checked> Posten der aktuellen Variante kopieren</label>
+      <div class="dlg-actions"><button type="button" class="btn" data-close>Abbrechen</button><button type="submit" class="btn primary" id="vaSubmit">Anlegen</button></div>
+    </form>
+  </dialog>
+
+  <!-- Dialog: Musiker -->
+  <dialog id="dlgMusician" class="dlg">
+    <form method="dialog" id="formMusician">
+      <h3 id="dlgMusicianTitle">Neue Person</h3>
+      <div class="row2">
+        <label>Name<input id="muName" name="name" required autocomplete="off"></label>
+        <label>Rolle / Instrument<input id="muRole" name="role" placeholder="Bass, Gesang, FOH …" autocomplete="off"></label>
+      </div>
+      <div class="row2">
+        <label>Standardgage (netto)<input id="muFee" name="default_fee" type="number" inputmode="numeric" min="0" step="1"></label>
+        <label>Telefon<input id="muPhone" name="phone" type="tel" autocomplete="off"></label>
+      </div>
+      <label>E-Mail<input id="muEmail" name="email" type="email" autocomplete="off"></label>
+      <label>IBAN<input id="muIban" name="iban" autocomplete="off" spellcheck="false"></label>
+      <label>Notizen<textarea id="muNotes" name="notes" rows="2"></textarea></label>
+      <div class="dlg-actions">
+        <button type="button" class="btn danger" id="muDeactivate" hidden>Deaktivieren</button>
+        <span style="flex:1"></span>
+        <button type="button" class="btn" data-close>Abbrechen</button><button type="submit" class="btn primary" id="muSubmit">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
