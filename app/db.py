@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS musicians (
     iban        TEXT NOT NULL DEFAULT '',
     notes       TEXT NOT NULL DEFAULT '',
     active      INTEGER NOT NULL DEFAULT 1,
+    is_self     INTEGER NOT NULL DEFAULT 0,      -- „das bin ich" (Bandleitung): keine Häkchen, eigener Anteil in der Statistik
     created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
@@ -88,7 +89,12 @@ CREATE INDEX IF NOT EXISTS idx_items_musician ON line_items(musician_id);
 CREATE INDEX IF NOT EXISTS idx_events_gig ON events(gig_id);
 """
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+# Migrationen von Version n → n+1 (nur für bestehende Datenbanken; neue bekommen sofort das volle Schema)
+MIGRATIONS = {
+    1: ["ALTER TABLE musicians ADD COLUMN is_self INTEGER NOT NULL DEFAULT 0"],
+}
 
 
 def connect() -> sqlite3.Connection:
@@ -106,6 +112,13 @@ def init_db() -> None:
         row = conn.execute("SELECT version FROM schema_version").fetchone()
         if row is None:
             conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
+            return
+        version = row["version"]
+        while version < SCHEMA_VERSION:
+            for stmt in MIGRATIONS[version]:
+                conn.execute(stmt)
+            version += 1
+            conn.execute("UPDATE schema_version SET version = ?", (version,))
 
 
 @contextmanager

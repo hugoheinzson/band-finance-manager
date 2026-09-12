@@ -225,7 +225,7 @@ def main() -> None:
         musicians: dict[str, int] = {}
         for _, (name, role) in NAMES.items():
             if name not in musicians:
-                musicians[name] = service.create_musician(conn, {"name": name, "role": role})["id"]
+                musicians[name] = service.create_musician(conn, {"name": name, "role": role, "is_self": name == SELF_NAME})["id"]
         stats = {"gigs": 0, "items": 0, "unassigned": 0}
         wb = openpyxl.load_workbook(args.xlsx, data_only=True)
         for ws in wb.worksheets:

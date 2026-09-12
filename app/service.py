@@ -129,7 +129,21 @@ def find_musician(conn: sqlite3.Connection, name: str) -> dict | None:
 
 def _fix_musician(m: dict) -> dict:
     m["active"] = bool(m["active"])
+    m["is_self"] = bool(m.get("is_self", 0))
     return m
+
+
+def self_musician_id(conn: sqlite3.Connection) -> int | None:
+    r = conn.execute("SELECT id FROM musicians WHERE is_self = 1 LIMIT 1").fetchone()
+    return r["id"] if r else None
+
+
+def _set_self(conn: sqlite3.Connection, musician_id: int, value: bool) -> None:
+    """Genau eine Person kann „ich" sein; ihre Posten brauchen keine Häkchen (alle `na`)."""
+    if value:
+        conn.execute("UPDATE musicians SET is_self = 0 WHERE id != ?", (musician_id,))
+        conn.execute("UPDATE line_items SET info='na', invoice='na', paid='na' WHERE musician_id = ?", (musician_id,))
+    conn.execute("UPDATE musicians SET is_self = ? WHERE id = ?", (1 if value else 0, musician_id))
 
 
 _MUSICIAN_FIELDS = ("name", "role", "default_fee", "email", "phone", "iban", "notes", "active")
@@ -147,6 +161,8 @@ def create_musician(conn: sqlite3.Connection, data: dict) -> dict:
          (data.get("email") or "").strip(), (data.get("phone") or "").strip(),
          (data.get("iban") or "").replace(" ", "").strip(), data.get("notes") or ""),
     )
+    if data.get("is_self"):
+        _set_self(conn, cur.lastrowid, True)
     return get_musician(conn, cur.lastrowid)
 
 
@@ -173,6 +189,8 @@ def update_musician(conn: sqlite3.Connection, musician_id: int, data: dict) -> d
         vals.append(v)
     if sets:
         conn.execute(f"UPDATE musicians SET {', '.join(sets)} WHERE id = ?", (*vals, musician_id))
+    if "is_self" in data:
+        _set_self(conn, musician_id, bool(data["is_self"]))
     return get_musician(conn, musician_id)
 
 
@@ -208,16 +226,18 @@ def create_item(conn: sqlite3.Connection, variant_id: int, data: dict) -> dict:
     if kind not in ITEM_KINDS:
         raise Invalid(f"kind muss einer von {ITEM_KINDS} sein")
     musician_id = data.get("musician_id")
+    flags = [_check_flag(data.get("info") or "open", "info"), _check_flag(data.get("invoice") or "open", "invoice"),
+             _check_flag(data.get("paid") or "open", "paid")]
     if musician_id is not None:
-        get_musician(conn, int(musician_id))
+        musician_id = int(musician_id)
+        if get_musician(conn, musician_id)["is_self"]:
+            flags = ["na", "na", "na"]  # ich schreibe mir keine Rechnung und informiere mich nicht
     max_order = conn.execute("SELECT COALESCE(MAX(sort_order), -1) FROM line_items WHERE variant_id = ?", (variant_id,)).fetchone()[0]
     cur = conn.execute(
         """INSERT INTO line_items (variant_id, kind, role, musician_id, label, amount, info, invoice, paid, note, sort_order)
            VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
         (variant_id, kind, (data.get("role") or "").strip(), musician_id, (data.get("label") or "").strip(),
-         _int(data.get("amount") or 0, "amount"),
-         _check_flag(data.get("info") or "open", "info"), _check_flag(data.get("invoice") or "open", "invoice"),
-         _check_flag(data.get("paid") or "open", "paid"), data.get("note") or "", max_order + 1),
+         _int(data.get("amount") or 0, "amount"), *flags, data.get("note") or "", max_order + 1),
     )
     _touch_gig(conn, gig_id)
     return get_item(conn, cur.lastrowid)
@@ -251,6 +271,14 @@ def update_item(conn: sqlite3.Connection, item_id: int, data: dict) -> dict:
     if sets:
         conn.execute(f"UPDATE line_items SET {', '.join(sets)} WHERE id = ?", (*vals, item_id))
         _touch_gig(conn, _gig_id_of_variant(conn, item["variant_id"]))
+    # Eigene Zeile: Häkchen immer `na` – auch wenn jemand versucht, sie zu setzen.
+    # Wechsel von „ich" zu jemand anderem: Häkchen wieder auf offen.
+    new_mid = data.get("musician_id", item["musician_id"])
+    was_self = item["musician_id"] is not None and item["musician_id"] == self_musician_id(conn)
+    if new_mid is not None and new_mid == self_musician_id(conn):
+        conn.execute("UPDATE line_items SET info='na', invoice='na', paid='na' WHERE id = ?", (item_id,))
+    elif was_self and new_mid != item["musician_id"]:
+        conn.execute("UPDATE line_items SET info='open', invoice='open', paid='open' WHERE id = ?", (item_id,))
     return get_item(conn, item_id)
 
 
@@ -506,17 +534,23 @@ def open_payments(conn: sqlite3.Connection, gig_id: int | None = None) -> list[d
 
 
 def stats(conn: sqlite3.Connection) -> dict:
+    self_id = self_musician_id(conn)
     years: dict[int, dict] = {}
     for g in list_gigs(conn):
         if g["status"] not in COUNTING_STATUS:
             continue
-        y = years.setdefault(g["year"], {"year": g["year"], "gigs": 0, "fee_total": 0, "rest_total": 0, "open_items": 0})
+        y = years.setdefault(g["year"], {"year": g["year"], "gigs": 0, "fee_total": 0, "rest_total": 0, "open_items": 0, "self_total": 0})
         t = g["totals"]
         y["gigs"] += 1
         y["fee_total"] += t["fee"]
         y["rest_total"] += t["rest"]
         y["open_items"] += t["items"] - t["paid_done"]
+        if self_id is not None:
+            y["self_total"] += conn.execute(
+                "SELECT COALESCE(SUM(amount),0) FROM line_items WHERE variant_id = ? AND musician_id = ?",
+                (g["active_variant_id"], self_id)).fetchone()[0]
     return {
+        "self_musician_id": self_id,
         "years": sorted(years.values(), key=lambda x: x["year"]),
         "open_payments": open_payments(conn),
         "templates": list_gigs(conn, status="vorlage"),

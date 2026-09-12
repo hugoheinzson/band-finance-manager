@@ -156,6 +156,7 @@ def list_musicians(include_inactive: bool = False) -> str:
     for m in rows:
         contact = " · ".join(x for x in (m["email"], m["phone"]) if x)
         out.append(f"[{m['id']}] {m['name']} — {m['role'] or '?'} · Standard {_eur(m['default_fee'])} · {m['gig_count']} Gigs"
+                   + (" · DAS BIN ICH (Bandleitung, keine Häkchen)" if m["is_self"] else "")
                    + (f" · {contact}" if contact else "") + ("" if m["active"] else " · INAKTIV"))
     return "\n".join(out)
 
@@ -166,9 +167,11 @@ def stats() -> str:
     s = _svc(service.stats)
     if not s["years"]:
         return "Noch keine gespielten Gigs."
-    lines = ["| Jahr | Gigs | Gage gesamt | Rest (Bandkasse) | offene Posten |", "|---|---|---|---|---|"]
+    lines = ["| Jahr | Gigs | Gage gesamt | Mein Anteil | Rest (Bandkasse) | offene Posten |", "|---|---|---|---|---|---|"]
     for y in s["years"]:
-        lines.append(f"| {y['year']} | {y['gigs']} | {_eur(y['fee_total'])} | {_eur(y['rest_total'])} | {y['open_items']} |")
+        lines.append(f"| {y['year']} | {y['gigs']} | {_eur(y['fee_total'])} | {_eur(y['self_total'])} | {_eur(y['rest_total'])} | {y['open_items']} |")
+    if s["self_musician_id"] is None:
+        lines.append("(„Mein Anteil“ ist leer, weil noch niemand als „das bin ich“ markiert ist – upsert_musician(name, is_self=true).)")
     lines.append("")
     lines.append(f"Offene Auszahlungen insgesamt: {len(s['open_payments'])} (Details: open_payments).")
     return "\n".join(lines)
@@ -322,7 +325,7 @@ def mark(gig: str, who: str, info: str = "", invoice: str = "", paid: str = "") 
 
 @mcp.tool
 def upsert_musician(name: str, role: str = "", default_fee: int | None = None, email: str = "", phone: str = "",
-                    iban: str = "", notes: str = "") -> str:
+                    iban: str = "", notes: str = "", is_self: bool | None = None) -> str:
     """Musiker anlegen oder Stammdaten ergänzen (Rolle, Standardgage, E-Mail, Telefon, IBAN). Leere Felder bleiben unverändert.
 
     Args:
@@ -333,10 +336,14 @@ def upsert_musician(name: str, role: str = "", default_fee: int | None = None, e
         phone: Telefon/WhatsApp (international, z. B. +49151…).
         iban: Für die spätere Überweisungs-Automatik.
         notes: Freitext.
+        is_self: true = diese Person ist die Bandleitung selbst: ihre Posten haben keine Häkchen
+            (kein Informieren, keine Rechnung, keine Überweisung) und zählen als „Mein Anteil" in stats.
     """
     patch = {k: v for k, v in {"role": role, "email": email, "phone": phone, "iban": iban, "notes": notes}.items() if v}
     if default_fee is not None:
         patch["default_fee"] = default_fee
+    if is_self is not None:
+        patch["is_self"] = is_self
     m = _svc(service.find_musician, name)
     if m:
         patch["active"] = True  # ein früher deaktivierter Musiker wird durch Upsert wieder aktiv

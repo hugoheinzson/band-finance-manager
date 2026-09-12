@@ -151,6 +151,8 @@ td.person{white-space:nowrap}
 .amt input:focus{border-color:var(--accent);background:var(--surface)}
 .amt span{color:var(--faint);font-size:12px}
 .tg{width:34px;height:34px;border-radius:8px;border:1.5px solid var(--line-strong);display:inline-grid;place-items:center;font-size:13px;font-weight:700;color:var(--faint);background:transparent;transition:transform .08s}
+/* eigene Zeile (Bandleitung): kein Toggle, nur ein stiller Strich in derselben Box-Größe */
+.tg-self{width:34px;height:34px;display:inline-grid;place-items:center;color:var(--faint);font-weight:700}
 .tg:active{transform:scale(.92)}
 .tg[data-s="done"]{background:var(--good);border-color:var(--good);color:#fff}
 .tg[data-s="na"]{border-style:dashed;color:var(--faint)}

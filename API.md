@@ -17,6 +17,7 @@ Fehler: `{"detail": "…"}` mit 400/404.
 Musician {
   "id": 3, "name": "Ben", "role": "Bass", "default_fee": 180,
   "email": "", "phone": "", "iban": "", "notes": "", "active": true,
+  "is_self": false,          // „das bin ich" (Bandleitung) – höchstens eine Person; ihre Posten haben immer info/invoice/paid = "na"
   "gig_count": 19            // nur lesend, Anzahl Gigs mit Posten dieser Person
 }
 
@@ -96,7 +97,8 @@ GigListItem {                 // Liste
 `GET /api/stats` →
 ```jsonc
 {
-  "years": [ { "year": 2025, "gigs": 4, "fee_total": 8750, "rest_total": 20, "open_items": 1 }, … ],  // nur status bestaetigt|abgerechnet
+  "self_musician_id": 1,                                                                         // null, wenn niemand als „das bin ich" markiert ist
+  "years": [ { "year": 2025, "gigs": 4, "fee_total": 8750, "self_total": 1150, "rest_total": 20, "open_items": 1 }, … ],  // nur status bestaetigt|abgerechnet; self_total = Summe eigener Posten
   "open_payments": [ { "gig_id": 12, "gig_title": "Hochzeit Miller", "gig_date": "2026-07-18",
                        "item_id": 41, "who": "Ben", "role": "Bass", "amount": 190,
                        "info": "done", "invoice": "open" }, … ],                                  // paid == "open", amount > 0, gig bestaetigt|abgerechnet

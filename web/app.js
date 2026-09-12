@@ -246,7 +246,11 @@ function musicianSelect(item) {
 function rowHTML(it, g) {
   const na = it.info === 'na' && it.invoice === 'na' && it.paid === 'na';
   const due = PLAYED.has(g.status) && (+it.amount || 0) > 0;
-  const tg = (k, label) => `<td class="c"><button class="tg ${it[k] === 'open' && due ? 'due' : ''}" data-tg="${it.id}:${k}" data-s="${it[k]}" aria-label="${label}: ${it[k] === 'done' ? 'erledigt' : it[k] === 'na' ? 'entfällt' : 'offen'}">${it[k] === 'done' ? '✓' : it[k] === 'na' ? '–' : ''}</button></td>`;
+  // Eigene Zeile (Bandleitung): keine Häkchen – der Server hält sie ohnehin auf „entfällt"
+  const self = it.musician_id != null && state.musicians.some((m) => m.id === it.musician_id && m.is_self);
+  const tg = (k, label) => self
+    ? `<td class="c"><span class="tg-self" aria-label="${label}: entfällt (eigene Zeile)">–</span></td>`
+    : `<td class="c"><button class="tg ${it[k] === 'open' && due ? 'due' : ''}" data-tg="${it.id}:${k}" data-s="${it[k]}" aria-label="${label}: ${it[k] === 'done' ? 'erledigt' : it[k] === 'na' ? 'entfällt' : 'offen'}">${it[k] === 'done' ? '✓' : it[k] === 'na' ? '–' : ''}</button></td>`;
   const who = it.kind === 'musician'
     ? `${it.musician_name ? `<span class="avatar">${esc(initials(it.musician_name))}</span>` : ''}${musicianSelect(it)}`
     : `<span class="inline ${it.label ? '' : 'placeholder'}" data-edit="item:${it.id}:label">${esc(it.label || 'wer / woher')}</span>`;
@@ -658,6 +662,7 @@ async function openMusicianDialog(existing, defaults = {}) {
   const set = (id, v) => { $(id).value = v ?? ''; };
   set('#muName', existing?.name); set('#muRole', existing?.role ?? defaults.role); set('#muFee', existing?.default_fee ?? '');
   set('#muPhone', existing?.phone); set('#muEmail', existing?.email); set('#muIban', existing?.iban); set('#muNotes', existing?.notes);
+  $('#muSelf').checked = !!existing?.is_self;
   const deact = $('#muDeactivate'); deact.hidden = !existing || existing.active === false;
   let deactivated = false;
   const onDeact = async () => {
@@ -673,6 +678,7 @@ async function openMusicianDialog(existing, defaults = {}) {
   const body = {
     name: fd.get('name').trim(), role: fd.get('role').trim(), default_fee: parseInt(fd.get('default_fee'), 10) || 0,
     email: fd.get('email').trim(), phone: fd.get('phone').trim(), iban: fd.get('iban').replace(/\s+/g, '').toUpperCase(), notes: fd.get('notes').trim(),
+    is_self: fd.get('is_self') === 'on',
   };
   try {
     const m = existing ? await api('PATCH', `/api/musicians/${existing.id}`, body) : await api('POST', '/api/musicians', body);
@@ -691,7 +697,7 @@ function renderMusicians() {
   main.innerHTML = `<div class="topbar"><div><h2>Musiker &amp; Crew</h2><div class="meta">${list.filter((m) => m.active).length} aktiv · Standardgagen werden beim Besetzen vorgeschlagen</div></div>
     <div class="actions"><button class="btn" id="toggleInactive">${showInactive ? 'Inaktive ausblenden' : 'Inaktive zeigen'}</button><button class="btn primary" id="newMusician">+ Person</button></div></div>
     ${list.length ? `<div class="people">${list.map((p) => `<button class="person-card ${p.active ? '' : 'inactive'}" data-person="${p.id}"><span class="avatar">${esc(initials(p.name))}</span><div>
-      <h3>${esc(p.name)}</h3><div class="role">${esc(p.role || '—')}${p.active ? '' : ' · inaktiv'}</div>
+      <h3>${esc(p.name)}</h3><div class="role">${esc(p.role || '—')}${p.is_self ? ' · das bin ich' : ''}${p.active ? '' : ' · inaktiv'}</div>
       <div class="kv"><span>Standardgage</span><b class="num">${p.default_fee ? eur(p.default_fee) : '—'}</b><span>Gigs</span><b class="num">${p.gig_count ?? 0}</b><span>IBAN</span>${p.iban ? '<b>hinterlegt</b>' : '<b class="iban">fehlt</b>'}</div>
     </div></button>`).join('')}</div>` : '<div class="empty">Noch niemand angelegt – füge die erste Person hinzu.</div>'}`;
   $('#newMusician').addEventListener('click', () => openMusicianDialog(null));
@@ -727,11 +733,12 @@ function renderStats() {
       ${open.length ? '' : '<span style="grid-column:1/-1;color:var(--faint);padding:8px 0">Alles ausgezahlt 🎉</span>'}</div>
     </div>
   </div>
-  <div class="panel"><div class="panel-h"><h3>Bandkasse aus Rest-Beträgen</h3><span class="cnt">Summe „Übrig“ je Jahr (nur gespielte Gigs)</span></div>
-    <div class="stat-list" style="grid-template-columns:1fr auto auto">
-      <span class="h">Jahr</span><span class="h" style="text-align:right">Offen</span><span class="h" style="text-align:right">Rest</span>
-      ${years.slice().reverse().map((y) => `<span>${y.year}</span><span class="num" style="text-align:right;color:${y.open_items ? 'var(--warn)' : 'var(--muted)'}">${y.open_items ? `${y.open_items} Posten` : '–'}</span><b class="num" style="text-align:right;color:${y.rest_total < 0 ? 'var(--bad)' : 'var(--good)'}">${y.rest_total < 0 ? '–' : '+'}${eur(Math.abs(y.rest_total))}</b>`).join('')}
-      ${years.length ? `<span style="font-weight:700;border-top:1px solid var(--line);padding-top:6px">Gesamt</span><span style="border-top:1px solid var(--line)"></span><b class="num" style="text-align:right;border-top:1px solid var(--line);padding-top:6px">${(() => { const r = years.reduce((a, y) => a + y.rest_total, 0); return `${r < 0 ? '–' : '+'}${eur(Math.abs(r))}`; })()}</b>` : ''}
+  <div class="panel"><div class="panel-h"><h3>Mein Anteil &amp; Bandkasse</h3><span class="cnt">je Jahr, nur gespielte Gigs · Rest = Summe „Übrig“ → Bandkasse</span></div>
+    <div class="stat-list" style="grid-template-columns:1fr auto auto auto">
+      <span class="h">Jahr</span><span class="h" style="text-align:right">Mein Anteil</span><span class="h" style="text-align:right">Offen</span><span class="h" style="text-align:right">Rest</span>
+      ${years.slice().reverse().map((y) => `<span>${y.year}</span><b class="num" style="text-align:right">${s.self_musician_id ? eur(y.self_total) : '–'}</b><span class="num" style="text-align:right;color:${y.open_items ? 'var(--warn)' : 'var(--muted)'}">${y.open_items ? `${y.open_items} Posten` : '–'}</span><b class="num" style="text-align:right;color:${y.rest_total < 0 ? 'var(--bad)' : 'var(--good)'}">${y.rest_total < 0 ? '–' : '+'}${eur(Math.abs(y.rest_total))}</b>`).join('')}
+      ${years.length ? `<span style="font-weight:700;border-top:1px solid var(--line);padding-top:6px">Gesamt</span><b class="num" style="text-align:right;border-top:1px solid var(--line);padding-top:6px">${s.self_musician_id ? eur(years.reduce((a, y) => a + y.self_total, 0)) : '–'}</b><span style="border-top:1px solid var(--line)"></span><b class="num" style="text-align:right;border-top:1px solid var(--line);padding-top:6px">${(() => { const r = years.reduce((a, y) => a + y.rest_total, 0); return `${r < 0 ? '–' : '+'}${eur(Math.abs(r))}`; })()}</b>` : ''}
+      ${s.self_musician_id ? '' : '<span style="grid-column:1/-1;color:var(--faint);font-size:12px;padding-top:6px">„Mein Anteil“ erscheint, sobald du dich unter Musiker als „das bin ich“ markierst.</span>'}
     </div></div>
   <p class="draft-note">Auswertungen ergeben sich automatisch aus den Gig-Daten.</p>`;
 }

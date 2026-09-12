@@ -63,6 +63,22 @@ def rest() -> None:
     f = c.post("/api/gigs", json={"title": "Smoke-Vorlage", "fee": 900, "template_gig_id": gid}).json()
     assert len(f["variants"][0]["items"]) == 2
 
+    # „Das bin ich": eigene Posten bekommen automatisch na/na/na, Statistik zählt „Mein Anteil"
+    prev_self = next((x["id"] for x in c.get("/api/musicians?all=true").json() if x.get("is_self")), None)
+    me = c.post("/api/musicians", json={"name": "Smoke Self", "is_self": True}).json()
+    assert me["is_self"] is True
+    mine = c.post(f"/api/variants/{v2['id']}/items", json={"kind": "musician", "role": "Keys", "musician_id": me["id"], "amount": 250}).json()
+    assert (mine["info"], mine["invoice"], mine["paid"]) == ("na", "na", "na"), mine
+    assert c.patch(f"/api/items/{mine['id']}", json={"paid": "done"}).json()["paid"] == "na", "eigene Zeile muss na bleiben"
+    yr = [y for y in c.get("/api/stats").json()["years"] if y["year"] == 2030]
+    assert yr and yr[0]["self_total"] == 250, yr
+    assert c.patch(f"/api/items/{mine['id']}", json={"musician_id": m["id"]}).json()["paid"] == "open", "nach Wechsel weg von mir wieder offen"
+    if prev_self is not None:
+        c.patch(f"/api/musicians/{prev_self}", json={"is_self": True})  # ursprüngliche Markierung zurück
+    else:
+        c.patch(f"/api/musicians/{me['id']}", json={"is_self": False})
+    c.delete(f"/api/musicians/{me['id']}")
+
     for x in (gid, d["id"], f["id"]):
         assert c.delete(f"/api/gigs/{x}").status_code == 204
     assert c.get(f"/api/gigs/{gid}").status_code == 404
