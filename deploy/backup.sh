@@ -5,7 +5,8 @@
 #   BANDMANAGER_DATA               Datenverzeichnis (enthält band-manager.db)
 #   BANDMANAGER_BACKUP_DIR         lokales Backup-Verzeichnis        (Default: $BANDMANAGER_DATA/backup)
 #   BANDMANAGER_RCLONE_REMOTE      rclone-Ziel, z. B. dropbox-crypt:band-manager   (leer = kein Upload)
-#   BANDMANAGER_PUBLIC_EXPORT_DIR  Ordner für CSVs OHNE Kontaktdaten, z. B. ~/Dropbox/Band Manager (leer = aus)
+#   BANDMANAGER_PUBLIC_EXPORT_DIR  lokaler Ordner für CSVs OHNE Kontaktdaten (Default: $BACKUP_DIR/csv-public)
+#   BANDMANAGER_PUBLIC_RCLONE_REMOTE  unverschlüsseltes rclone-Ziel für diese CSVs, z. B. dropbox:MeineBand/Band Manager (leer = aus)
 #   BANDMANAGER_MAIL_CONFIG        SMTP-Config für Fehler-Mails (leer = nur Log)
 #   BANDMANAGER_KEEP_DAILY         lokale/tägliche Snapshots behalten (Default 14)
 #   BANDMANAGER_KEEP_MONTHLY_DAYS  monatliche Snapshots im Remote behalten (Default 730 Tage)
@@ -25,7 +26,8 @@ export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 DATA_DIR="${BANDMANAGER_DATA:-$HOME/band-manager-data}"; DATA_DIR="${DATA_DIR/#\~/$HOME}"
 BACKUP_DIR="${BANDMANAGER_BACKUP_DIR:-$DATA_DIR/backup}"; BACKUP_DIR="${BACKUP_DIR/#\~/$HOME}"
 REMOTE="${BANDMANAGER_RCLONE_REMOTE:-}"
-PUBLIC_DIR="${BANDMANAGER_PUBLIC_EXPORT_DIR:-}"; PUBLIC_DIR="${PUBLIC_DIR/#\~/$HOME}"
+PUBLIC_DIR="${BANDMANAGER_PUBLIC_EXPORT_DIR:-$BACKUP_DIR/csv-public}"; PUBLIC_DIR="${PUBLIC_DIR/#\~/$HOME}"
+PUBLIC_REMOTE="${BANDMANAGER_PUBLIC_RCLONE_REMOTE:-}"
 KEEP_DAILY="${BANDMANAGER_KEEP_DAILY:-14}"
 KEEP_MONTHLY_DAYS="${BANDMANAGER_KEEP_MONTHLY_DAYS:-730}"
 export BANDMANAGER_DB="$DATA_DIR/band-manager.db"
@@ -59,11 +61,14 @@ log "Snapshot ok: $(basename "$SNAP") · $GIGS Gigs · $(echo "$RESULT" | python
 # 2. CSV-Exporte (voll = mit Kontaktdaten/IBAN → nur verschlüsselt; public = ohne)
 $PY export-csv "$BACKUP_DIR/csv" >/dev/null || fail "CSV-Export fehlgeschlagen"
 log "CSV exportiert nach $BACKUP_DIR/csv"
-if [ -n "$PUBLIC_DIR" ]; then
-    mkdir -p "$PUBLIC_DIR"
-    $PY export-csv "$PUBLIC_DIR" --public >/dev/null || fail "Public-CSV-Export fehlgeschlagen"
-    printf 'Automatischer Export des Band Managers vom %s.\nOhne Kontaktdaten/IBAN. Vollständige Sicherung liegt verschlüsselt im rclone-Remote.\n' "$(date '+%d.%m.%Y %H:%M')" > "$PUBLIC_DIR/README.txt"
-    log "Public-CSV nach $PUBLIC_DIR"
+mkdir -p "$PUBLIC_DIR"
+$PY export-csv "$PUBLIC_DIR" --public >/dev/null || fail "Public-CSV-Export fehlgeschlagen"
+printf 'Automatischer Export des Band Managers vom %s.\nOhne Kontaktdaten/IBAN. Vollständige Sicherung liegt verschlüsselt im rclone-Remote.\n' "$(date '+%d.%m.%Y %H:%M')" > "$PUBLIC_DIR/README.txt"
+log "Public-CSV nach $PUBLIC_DIR"
+if [ -n "$PUBLIC_REMOTE" ]; then
+    command -v rclone >/dev/null || fail "rclone nicht gefunden"
+    rclone sync "$PUBLIC_DIR/" "$PUBLIC_REMOTE/" --log-file="$LOG" --log-level NOTICE
+    log "Public-CSV nach $PUBLIC_REMOTE"
 fi
 
 # 3. Konfiguration, die ein Restore auf frischem System braucht

@@ -7,7 +7,7 @@ folder) and produces, per run:
 |---|---|---|
 | `daily/band-manager_<stamp>.db.gz` – consistent SQLite snapshot (backup API, `PRAGMA integrity_check`) | local `BANDMANAGER_BACKUP_DIR` + rclone remote | yes → remote must be an encrypted (`crypt`) remote |
 | `csv/gigs.csv`, `csv/posten.csv`, `csv/musiker.csv` – flat exports, `;`-separated, UTF‑8 with BOM (opens in Excel/Numbers) | same | yes (musiker.csv has contacts/IBAN) |
-| `gigs.csv`, `posten.csv` **without** contacts | `BANDMANAGER_PUBLIC_EXPORT_DIR` (e.g. a plain Dropbox folder) | no |
+| `gigs.csv`, `posten.csv` **without** contacts | `BANDMANAGER_PUBLIC_EXPORT_DIR` (local) and, if set, `BANDMANAGER_PUBLIC_RCLONE_REMOTE` (a plain, unencrypted cloud folder) | no |
 | `config/env`, `config/import-config.json` | remote only | yes (API token, names) |
 | `monthly/…` – copy of the 1st-of-month snapshot, pruned after `BANDMANAGER_KEEP_MONTHLY_DAYS` | remote | yes |
 
